@@ -16,11 +16,16 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     
     # Validation check for required columns
-    required_cols = ['What is your full name?', 'How often can you meet with your buddy?']
+    # Note: Added 'Email Address' to the required columns check
+    required_cols = ['What is your full name?', 'How often can you meet with your buddy?', 'What is your email?']
+    
     if not all(col in df.columns for col in required_cols):
-        st.error("The uploaded CSV is missing required columns. Please check your file format.")
+        st.error(f"The uploaded CSV is missing required columns. Ensure it contains: {', '.join(required_cols)}")
     else:
         with st.spinner('Running matching algorithm...'):
+            # --- Pre-processing: Map names to emails ---
+            name_to_email = df.set_index('What is your full name?')['What is your email?'].to_dict()
+
             # --- Step 1: Group based on availability ---
             availability_cols = [col for col in df.columns if "available" in col]
             melted = df.melt(id_vars=['What is your full name?'], value_vars=availability_cols)
@@ -116,13 +121,21 @@ if uploaded_file is not None:
                             joined = True
                             break
 
-            # Build Final DF
+            # --- Build Final Results Table ---
             final_rows = []
             for i, group in enumerate(groups):
                 group_id = f"Group {i+1}"
                 group_names = ", ".join(group)
+                # Concatenate emails for everyone in the group
+                group_emails = ", ".join([name_to_email.get(member, "N/A") for member in group])
+                
                 for member in group:
-                    final_rows.append({'What is your full name?': member, 'Group ID': group_id, 'Group Members': group_names})
+                    final_rows.append({
+                        'What is your full name?': member, 
+                        'Group ID': group_id, 
+                        'Group Members': group_names,
+                        'Group Emails': group_emails
+                    })
 
             final_df = df.merge(pd.DataFrame(final_rows), on='What is your full name?')
 
@@ -131,9 +144,18 @@ if uploaded_file is not None:
             
             st.subheader("Final Pairings")
             
-            # Use hide_index=True to remove the leftmost index column
+            # Display unique groups with their members and emails
             st.dataframe(
-                final_df[['Group ID', 'Group Members']].drop_duplicates(), 
+                final_df[['Group ID', 'Group Members', 'Group Emails']].drop_duplicates(), 
                 use_container_width=True, 
                 hide_index=True
+            )
+            
+            # Optional: Allow user to download the full results
+            csv = final_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Full Results as CSV",
+                data=csv,
+                file_name="msl_buddy_matches.csv",
+                mime="text/csv",
             )
