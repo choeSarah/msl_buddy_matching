@@ -125,34 +125,38 @@ if uploaded_file is not None:
             final_rows = []
             for i, group in enumerate(groups):
                 group_id = f"Group {i+1}"
-                group_names = ", ".join(group)
-                # Concatenate emails for everyone in the group
-                group_emails = ", ".join([name_to_email.get(member, "N/A") for member in group])
                 
                 for member in group:
+                    # Fetching individual data from the original dataframe for this specific member
+                    member_data = df[df['What is your full name?'] == member].iloc[0]
+                    
                     final_rows.append({
-                        'What is your full name?': member, 
-                        'Group ID': group_id, 
-                        'Group Members': group_names,
-                        'Group Emails': group_emails
+                        'Group ID': group_id,
+                        'Name': member,
+                        'Email': member_data['What is your email?'],
+                        'Interested Workshops': member_data['What shop(s) would you like to be more involved in?'],
+                        'Experienced Workshops': member_data['What shop(s) do you have experience in?']
                     })
 
-            final_df = df.merge(pd.DataFrame(final_rows), on='What is your full name?')
+            # Create a clean results dataframe
+            results_df = pd.DataFrame(final_rows)
 
             # --- Display Results ---
             st.success("Matching Complete!")
             
-            st.subheader("Final Pairings")
+            st.subheader("Final Pairings & Workshop Interests")
             
-            # Display unique groups with their members and emails
+            # Display the detailed table
+            # We sort by Group ID to keep buddies next to each other
             st.dataframe(
-                final_df[['Group ID', 'Group Members', 'Group Emails']].drop_duplicates(), 
+                results_df.sort_values("Group ID"), 
                 use_container_width=True, 
                 hide_index=True
             )
             
-            # Optional: Allow user to download the full results
-            csv = final_df.to_csv(index=False).encode('utf-8')
+            # --- Download Logic ---
+            # Using the new results_df for a cleaner download
+            csv = results_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="Download Full Results as CSV",
                 data=csv,
