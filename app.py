@@ -150,33 +150,51 @@ if uploaded_file is not None:
 
             # --- Define the Styling Function ---
             def style_alternate_groups(data):
-                # Colors: Light Blue-ish Gray and White
-                color_1 = 'background-color: #f0f2f6'
+                """
+                Assigns alternating background colors based on changes in Group ID.
+                """
+                # Define colors (light gray and white)
+                color_1 = 'background-color: #f9f9f9'
                 color_2 = 'background-color: #ffffff'
                 
-                # Create a mask where Group ID changes
-                group_changes = data['Group ID'] != data['Group ID'].shift()
-                # Create a sequence (1, 1, 2, 2, 3...)
-                group_groups = group_changes.cumsum()
+                # We need to find the specific rows where Group ID changes
+                # creates a boolean mask [True, False, True, ...] where True is a change
+                changes = data['Group ID'] != data['Group ID'].shift()
                 
-                # Map colors based on even/odd group numbers
-                row_colors = np.where(group_groups % 2 != 0, color_1, color_2)
+                # Cumulatively sum the changes to create a helper sequence [1, 1, 2, 2, 3...]
+                group_num_sequence = changes.cumsum()
+
+                # Assign color_1 if the sequence number is odd, color_2 if even
+                # Applies this logic row by row (axis=1)
+                styles = np.where(group_num_sequence % 2 != 0, color_1, color_2)
                 
-                # Apply the color to every column in the row
-                return [row_colors for _ in range(len(data.columns))]
+                # Construct a DataFrame of styles identical in shape to input
+                style_df = pd.DataFrame(color_2, index=data.index, columns=data.columns)
+                
+                # Apply the calculated row styles across all columns
+                for i, row_style in enumerate(styles):
+                    style_df.iloc[i, :] = row_style
+                
+                return style_df
 
             # --- Apply Style and Display ---
-            # We use axis=None to apply the function to the entire column/row structure
-            styled_df = results_df_sorted.style.apply(style_alternate_groups, axis=0).hide(axis="index")
+            # IMPORTANT: We use st.table for custom row-level styling via Pandas Styler
+            try:
+                # 1. Apply formatting: hide the index and set column formatting
+                styler = results_df_sorted.style.hide(axis="index")\
+                                                 .format(na_rep="-")\
+                                                 .apply(style_alternate_groups, axis=None)
+                                                 
+                # 2. Render using st.table (or st.dataframe, if your version supports Styler)
+                # Note: st.table renders the full static table, st.dataframe includes scrolling
+                st.table(styler)
+            
+            except Exception as e:
+                # Fallback in case formatting fails
+                st.write("Displaying standard view due to formatting error.")
+                st.dataframe(results_df_sorted, use_container_width=True, hide_index=True)
 
-            # Display the static table with the styling applied
-            st.write(styled_df)
 
             # --- Download Logic ---
             csv = results_df_sorted.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download Full Results as CSV",
-                data=csv,
-                file_name="msl_buddy_matches.csv",
-                mime="text/csv",
-            )
+            # ... (download button remains the same)
